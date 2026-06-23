@@ -1,0 +1,37 @@
+services:
+  toolbox:
+    build:
+      context: ./docker/toolbox
+      dockerfile: Dockerfile.${ENVIRONMENT}
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+        - USERNAME=${USERNAME:-sid}
+    container_name: toolbox-${PROJECT}-${ENVIRONMENT}
+    hostname: toolbox
+    tty: true
+    stdin_open: true
+    # SÉCURITÉ : Permet au LSP (csharp-ls) d'exécuter tous ses appels système
+    security_opt:
+      - seccomp:unconfined
+    # ALTERNATIVE (si security_opt ne suffit pas) : privileged: true
+    volumes:
+      - "toolbox-home:/home/${USERNAME:-sid}"
+      - "./workspace:/home/${USERNAME:-sid}/workspace"
+    user: "${USERNAME:-sid}"
+    working_dir: "/home/${USERNAME:-sid}"
+    env_file:
+      - .env
+    environment:
+      - DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1
+    networks:
+      - internal-network
+
+networks:
+  internal-network:
+    name: internal-network-${PROJECT}-${ENVIRONMENT}
+    driver: bridge
+
+volumes:
+  toolbox-home:
+    name: toolbox-home-${PROJECT}-${ENVIRONMENT}

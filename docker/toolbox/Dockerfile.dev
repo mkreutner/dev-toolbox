@@ -1,0 +1,85 @@
+FROM debian:trixie-slim
+
+ARG UID=1000
+ARG GID=1000
+ARG USERNAME=sid
+
+# 1. Installation des dépendances système (Outils, .NET, Node et Python pour Neovim)
+RUN apt update && apt install -y --no-install-recommends \
+  bash \
+  curl \
+  git \
+  sudo \
+  tzdata \
+  build-essential \
+  ca-certificates \
+  make \
+  unzip \
+  ripgrep \
+  fd-find \
+  # Dépendances requises pour Python & Mason (Linters/Formatters)
+  python3 \
+  python3-pip \
+  python3-venv \
+  # Dépendances natives pour le runtime .NET sur Debian Trixie
+  libc6 \
+  libgcc-s1 \
+  libgssapi-krb5-2 \
+  libicu76 \
+  libssl3t64 \
+  libstdc++6 \
+  zlib1g \
+  && rm -rf /var/lib/apt/lists/* \
+  # 2. Installation globale de Neovim (v0.10+) via les releases officielles
+  && curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
+  && rm -rf /opt/nvim \
+  && tar -C /opt -xzf nvim-linux-x86_64.tar.gz \
+  && rm nvim-linux-x86_64.tar.gz
+
+# 3. Création et configuration de l'utilisateur avec permissions sudo strictes
+RUN groupadd -g "${GID}" "${USERNAME}" \
+  && useradd -u "${UID}" -g "${GID}" -m -s /bin/bash "${USERNAME}" \
+  && echo "${USERNAME} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/${USERNAME} \
+  && chmod 0440 /etc/sudoers.d/${USERNAME}
+
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+
+# 4. Variables d'environnement (Neovim & .NET)
+ENV PATH=$PATH:/opt/nvim-linux-x86_64/bin
+ENV DOTNET_ROOT=/home/${USERNAME}/.dotnet
+ENV PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools
+
+# 5. Installation du SDK .NET 10 & des outils
+RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh \
+  && chmod +x dotnet-install.sh \
+  && ./dotnet-install.sh --channel 10.0 \
+  && rm dotnet-install.sh \
+  && dotnet workload update \
+  && dotnet tool install --global dotnet-ef --version 10.0.* \
+  && dotnet ef --version
+
+# 6. Installation de OhMyBash (via Git pour éviter le crash en build non-interactif)
+ENV OSH=/home/${USERNAME}/.oh-my-bash
+RUN git clone --depth=1 https://github.com/ohmybash/oh-my-bash.git /home/${USERNAME}/.oh-my-bash \
+  && cp /home/${USERNAME}/.oh-my-bash/templates/bashrc.osh-template /home/${USERNAME}/.bashrc \
+  && sed -i 's/OSH_THEME="font"/OSH_THEME="agnoster"/' /home/${USERNAME}/.bashrc
+
+# 7. Installation de NVM, Node.js (LTS) et création des liens symboliques globaux pour Neovim
+ENV NVM_DIR=/home/${USERNAME}/.nvm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash \
+  && . "$NVM_DIR/nvm.sh" \
+  && nvm install --lts \
+  && nvm use default \
+  && sudo ln -s "$(which node)" /usr/local/bin/node \
+  && sudo ln -s "$(which npm)" /usr/local/bin/npm \
+  && sudo ln -s "$(which npx)" /usr/local/bin/npx
+
+# 8. Installation et pré-configuration de LazyVim avec tes Extras (Ordre strict respecté)
+RUN git clone https://github.com/LazyVim/starter /home/${USERNAME}/.config/nvim \
+  && rm -rf /home/${USERNAME}/.config/nvim/.git \
+  # Injection des extras JUSTE APRÈS l'import de la base lazyvim.plugins
+  && sed -i '/{ import = "lazyvim.plugins" }/a \ \ \ \ { import = "lazyvim.plugins.extras.lang.typescript" },\n\ \ \ \ { import = "lazyvim.plugins.extras.lang.angular" },\n\ \ \ \ { import = "lazyvim.plugins.extras.lang.python" },\n\ \ \ \ { import = "lazyvim.plugins.extras.lang.dotnet" },\n\ \ \ \ { import = "lazyvim.plugins.extras.lang.markdown" },\n\ \ \ \ { import = "lazyvim.plugins.extras.lang.tailwind" },\n\ \ \ \ { import = "lazyvim.plugins.extras.lang.json" },' /home/${USERNAME}/.config/nvim/lua/config/lazy.lua
+
+# 9. Shell par défaut
+CMD ["/bin/bash"]
