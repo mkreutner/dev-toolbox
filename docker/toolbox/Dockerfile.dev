@@ -36,6 +36,9 @@ RUN apt update && apt install -y --no-install-recommends \
   && tar -C /opt -xzf nvim-linux-x86_64.tar.gz \
   && rm nvim-linux-x86_64.tar.gz
 
+# 2. Installation de just
+COPY --from=ghcr.io/casey/just:latest /just /usr/local/bin/
+
 # 3. Création et configuration de l'utilisateur avec permissions sudo strictes
 RUN groupadd -g "${GID}" "${USERNAME}" \
   && useradd -u "${UID}" -g "${GID}" -m -s /bin/bash "${USERNAME}" \
