@@ -9,6 +9,7 @@ services:
         - USERNAME=${USERNAME:-sid}
     container_name: toolbox-${PROJECT}-${ENVIRONMENT}
     hostname: toolbox
+    restart: unless-stopped
     tty: true
     stdin_open: true
     # SÉCURITÉ : Permet au LSP (csharp-ls) d'exécuter tous ses appels système
@@ -25,12 +26,16 @@ services:
     environment:
       - DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1
     networks:
+      - toolbox-network
       - internal-network
 
 networks:
   internal-network:
     name: internal-network-${PROJECT}-${ENVIRONMENT}
     driver: bridge
+  toolbox-network:
+    external:
+      name: toolbox-network
 
 volumes:
   toolbox-home:
